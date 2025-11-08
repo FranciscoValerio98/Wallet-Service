@@ -1,22 +1,15 @@
 # --- Dependencias de Node.js ---
-# Esta carpeta es la más importante de ignorar.
-# Contiene todos los paquetes descargados (Express, MariaDB, etc.).
-# Puede pesar cientos de MB y se puede recrear con 'npm install'.
 /node_modules
 
-# --- Archivos de Secretos y Entorno ---
-# ¡NUNCA subas tus contraseñas a GitHub!
-# Este archivo contiene la contraseña de tu base de datos.
+# --- Archivos de Entorno ---
 .env
 
 # --- Logs ---
-# Ignora cualquier archivo de log que se genere.
 *.log
 npm-debug.log*
 yarn-error.log
 
 # --- Archivos del Sistema Operativo ---
-# Archivos basura de macOS
 .DS_Store
 
 # Archivos basura de Windows
