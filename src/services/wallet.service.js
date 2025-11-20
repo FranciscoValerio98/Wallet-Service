@@ -108,7 +108,7 @@ const getBalanceByUserId = async (userId) => {
     // **Punto Clave 2: El Query (SELECT)**
     // Seleccionamos solo los datos que el cliente necesita
     const sql =
-      "SELECT user_id, balance, currency, status FROM Wallets WHERE user_id = ?";
+      "SELECT wallet_id, user_id, balance, currency, status FROM Wallets WHERE user_id = ?";
 
     // Ejecutamos el query
     const rows = await conn.query(sql, [userId]);

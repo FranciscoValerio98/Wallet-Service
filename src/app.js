@@ -1,8 +1,12 @@
 // src/app.js
 const express = require("express");
+const cors = require("cors")
 const app = express();
 
 // --- 1. Middlewares ---
+
+// Esto permite que CUALQUIER frontend hable con tu backend.
+app.use(cors());
 
 // **Punto Clave:** Este middleware es vital.
 // Le enseña a Express a leer y entender el formato JSON

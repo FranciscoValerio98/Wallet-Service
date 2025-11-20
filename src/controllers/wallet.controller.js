@@ -8,6 +8,16 @@ const walletService = require("../services/wallet.service");
  * Maneja el request (req) y el response (res) de HTTP
  */
 const createWallet = async (req, res) => {
+
+  // El payload del token está en req.user
+  const { role } = req.user;
+
+  // Solo permitimos que el "Transaction Service" nos debite
+  // (Auth Service le da el rol 'service')
+  if (role !== 'service') {
+    return res.status(403).json({ error: 'Prohibido: No tienes permisos de servicio' });
+  }
+
   // **Punto Clave 1: Obtener datos del Request**
   // Sacamos el 'userId' que nos enviaron en el body JSON
   const { userId } = req.body;
@@ -42,12 +52,20 @@ const createWallet = async (req, res) => {
  */
 const getWalletBalance = async (req, res) => {
   // **Punto Clave 1: Obtener datos del Request**
-  // Esta vez el ID viene de la URL (parámetros)
-  const { userId } = req.params;
+  // El ID que el usuario pide en la URL
+  const { userId: userIdFromParams } = req.params;
+
+  // Los datos que vienen DENTRO del token
+  const { userId: userIdFromToken, role } = req.user;
+
+  // Un usuario solo puede ver su propio saldo.
+  if (role === 'user' && userIdFromParams !== userIdFromToken) {
+    return res.status(403).json({ error: 'Prohibido: No puedes ver el saldo de otro usuario' });
+  }
 
   try {
     // **Punto Clave 2: Llamar al Servicio**
-    const balanceData = await walletService.getBalanceByUserId(userId);
+    const balanceData = await walletService.getBalanceByUserId(userIdFromParams);
 
     // **Punto Clave 3: Enviar Respuesta Exitosa**
     res.status(200).json(balanceData);
@@ -63,6 +81,16 @@ const getWalletBalance = async (req, res) => {
 
 // --- (Controlador de Crédito) ---
 const creditWallet = async (req, res) => {
+
+  // El payload del token está en req.user
+  const { role } = req.user;
+
+  // Solo permitimos que el "Transaction Service" nos debite
+  // (Auth Service le da el rol 'service')
+  if (role !== 'service') {
+    return res.status(403).json({ error: 'Prohibido: No tienes permisos de servicio' });
+  }
+
   // **Punto Clave 1: Obtener datos del Request**
   // El Transaction Service nos enviará esto en el body (RF8)
   const { walletId, amount, externalTransactionId } = req.body;
@@ -101,6 +129,16 @@ const creditWallet = async (req, res) => {
 
 // --- (Controlador de Débito) ---
 const debitWallet = async (req, res) => {
+
+  // El payload del token está en req.user
+  const { role } = req.user;
+
+  // Solo permitimos que el "Transaction Service" nos debite
+  // (Auth Service le da el rol 'service')
+  if (role !== 'service') {
+    return res.status(403).json({ error: 'Prohibido: No tienes permisos de servicio' });
+  }
+
   const { walletId, amount, externalTransactionId } = req.body;
 
   const numericAmount = parseFloat(amount);
@@ -148,11 +186,29 @@ const getWalletLedger = async (req, res) => {
   const { walletId } = req.params;
   const idAsNumber = parseInt(walletId, 10);
 
+  // Obtenemos los datos del Token
+  const { userId: userIdFromToken, role } = req.user;
+
   if (isNaN(idAsNumber)) {
     return res.status(400).json({ error: "El walletId debe ser numérico." });
   }
 
   try {
+
+    // Verificamos: ¿Es un usuario normal?
+    if (role === 'user') {
+      // Si es 'user', DEBEMOS verificar que sea el dueño.
+
+      // Obtenemos la billetera para ver quién es el dueño
+      // (Reutilizamos la función de ayuda que ya teníamos)
+      const wallet = await walletService.getWalletById(idAsNumber);
+
+      // Comparamos el dueño de la wallet con el dueño del token
+      if (wallet.user_id !== userIdFromToken) {
+        return res.status(403).json({ error: 'Prohibido: No tienes permiso para ver este ledger.' });
+      }
+    }
+
     // **Punto Clave:** Añadimos 'await'
     const movements = await walletService.getLedgerByWalletId(idAsNumber);
     res.status(200).json(movements);
@@ -168,6 +224,16 @@ const getWalletLedger = async (req, res) => {
  * Controlador para compensar una transacción (RF10)
  */
 const compensateWallet = async (req, res) => {
+
+  // El payload del token está en req.user
+  const { role } = req.user;
+
+  // Solo permitimos que el "Transaction Service" nos debite
+  // (Auth Service le da el rol 'service')
+  if (role !== 'service') {
+    return res.status(403).json({ error: 'Prohibido: No tienes permisos de servicio' });
+  }
+
   // **Punto Clave 1: Obtener datos del Request**
   // El TS nos envía el ID de la TX original y el ID de esta nueva TX de compensación
   const { originalExternalTransactionId, compensationTransactionId } = req.body;
