@@ -1,4 +1,5 @@
 // src/services/wallet.service.js
+const axios = require('axios');
 
 // --- 1. Importar la conexión a la DB ---
 // Ya no necesitamos los mocks, ahora importamos el "pool"
@@ -470,6 +471,93 @@ const compensate = async (
     if (conn) conn.release();
   }
 };
+/**
+ * @param {number} walletId 
+ */
+const getLedgerWithDetails = async (walletId) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+
+    // 1. Obtener Transacciones (Igual que getLedgerByWalletId)
+    const sqlTx = "SELECT * FROM Ledger WHERE wallet_id = ? ORDER BY created_at DESC";
+    const transactions = await conn.query(sqlTx, [walletId]);
+
+    if (transactions.length === 0) return [];
+
+    // 2. Extraer IDs de las contrapartes (Wallets)
+    // Filtramos nulos y quitamos duplicados
+    const counterpartyWalletIds = [...new Set(
+      transactions
+        .map(tx => tx.counterparty_id)
+        .filter(id => id !== null && id !== undefined)
+    )];
+
+    // Si todas son operaciones internas (sin contraparte), devolvemos ya
+    if (counterpartyWalletIds.length === 0) return transactions;
+
+    // 3. Traducir WalletID -> UserID (Consulta local a tu DB)
+    // Truco SQL: Para usar IN (?) con mysql2, pasamos el array directamente
+    const sqlWallets = "SELECT wallet_id, user_id FROM Wallets WHERE wallet_id IN (?)";
+    const walletsInfo = await conn.query(sqlWallets, [counterpartyWalletIds]);
+
+    // Mapa: WalletID -> UserID
+    const walletToUserMap = {};
+    const userIdsToFetch = [];
+
+    walletsInfo.forEach(w => {
+      walletToUserMap[w.wallet_id] = w.user_id;
+      if(w.user_id) userIdsToFetch.push(w.user_id);
+    });
+
+    // 4. Llamar al User Service (El paso mágico 🚀)
+    let usersData = [];
+    try {
+        // OJO: Asegúrate que esta URL sea accesible desde Railway
+        const response = await axios.post('https://userservicesanti.onrender.com/users/batch-info', { 
+            userIds: userIdsToFetch 
+        });
+        usersData = response.data;
+    } catch (error) {
+        console.error("Error conectando con User Service:", error.message);
+        // No lanzamos error, seguimos para no romper la app, solo saldrán "Desconocidos"
+    }
+
+    // Mapa: UserID -> Datos { fullname, phone }
+    const userDetailsMap = {};
+    usersData.forEach(u => {
+        // Ajustamos a la estructura que devuelve tu User Service
+        if (u.user && u.user.user_id) {
+            userDetailsMap[u.user.user_id] = {
+                fullname: u.fullname,
+                phone: u.user.phone
+            };
+        }
+    });
+
+    // 5. Mezclar todo (Enrichment)
+    const enrichedTransactions = transactions.map(tx => {
+        const walletContraparte = tx.counterparty_id;
+        const userIdContraparte = walletToUserMap[walletContraparte];
+        const detalles = userDetailsMap[userIdContraparte];
+
+        return {
+            ...tx, // Copiamos datos originales de la transacción
+            // Inyectamos la info extra
+            counterparty_details: detalles || { fullname: 'Usuario Externo / Desconocido', phone: '---' }
+        };
+    });
+
+    return enrichedTransactions;
+
+  } catch (err) {
+    throw new Error(`Error en ledger enriquecido: ${err.message}`);
+  } finally {
+    if (conn) conn.release();
+  }
+};
+
+
 
 // Exportamos las funciones
 module.exports = {
@@ -480,4 +568,6 @@ module.exports = {
   getLedgerByWalletId,
   compensate,
   getWalletById,
+  getLedgerWithDetails,
 };
+

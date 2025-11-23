@@ -14,7 +14,7 @@ services:
       MYSQL_DATABASE: ${DB_DATABASE}
     ports:
       # Exponemos el puerto solo para DBeaver (opcional)
-      - "3306:3306"
+      - "3309:3306"
     volumes:
       # Esto hace que los datos de la DB se guarden en tu PC
       # y sobrevivan si borras el contenedor.
